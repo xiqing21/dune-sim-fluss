@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XINXIN Zheng — Web3 实时数据架构愿景</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --bg-elevated: #12121a;
+            --bg-card: #16161f;
+            --fg: #e8e6e1;
+            --fg-muted: #8a8880;
+            --fg-dim: #5a5850;
+            --accent: #c8f542;
+            --accent-dim: rgba(200, 245, 66, 0.12);
+            --accent-glow: rgba(200, 245, 66, 0.3);
+            --red: #ff4d4d;
+            --orange: #ff8a3d;
+            --cyan: #42f5e8;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-accent: rgba(200, 245, 66, 0.25);
+            --font-display: 'Syne', sans-serif;
+            --font-body: 'JetBrains Mono', monospace;
+            --font-serif: 'Instrument Serif', serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html {
+            scroll-behavior: smooth;
+            scrollbar-width: thin;
+            scrollbar-color: var(--fg-dim) var(--bg);
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            font-family: var(--font-body);
+            font-size: 14px;
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .grid-bg {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(200, 245, 66, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(200, 245, 66, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        nav .logo {
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: 18px;
+            letter-spacing: -0.5px;
+            color: var(--accent);
+        }
+
+        nav .logo span {
+            color: var(--fg-muted);
+            font-weight: 400;
+        }
+
+        nav .nav-links {
+            display: flex;
+            gap: 32px;
+            list-style: none;
+        }
+
+        nav .nav-links a {
+            color: var(--fg-muted);
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            transition: color 0.3s;
+        }
+
+        nav .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding-top: 80px;
+            position: relative;
+        }
+
+        .hero-content { width: 100%; }
+
+        .hero-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border: 1px solid var(--border-accent);
+            border-radius: 100px;
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--accent);
+            margin-bottom: 40px;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .hero-tag .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 2s infinite;
+        }
+
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: clamp(48px, 7vw, 96px);
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -2px;
+            margin-bottom: 32px;
+            animation: fadeInUp 0.8s ease-out 0.1s both;
+        }
+
+        .hero h1 .accent {
+            color: var(--accent);
+            position: relative;
+        }
+
+        .hero h1 .accent::after {
+            content: '';
+            position: absolute;
+            bottom: 4px; left: 0; right: 0;
+            height: 3px;
+            background: var(--accent);
+            opacity: 0.4;
+        }
+
+        .hero h1 .serif {
+            font-family: var(--font-serif);
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .hero-sub {
+            font-size: 18px;
+            line-height: 1.8;
+            color: var(--fg-muted);
+            max-width: 640px;
+            margin-bottom: 48px;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        .hero-sub strong { color: var(--fg); }
+
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            animation: fadeInUp 0.8s ease-out 0.3s both;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-decoration: none;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 30px var(--accent-glow);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--fg);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .hero-visual {
+            position: absolute;
+            right: 40px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 380px;
+            opacity: 0.6;
+            animation: fadeIn 1.2s ease-out 0.5s both;
+        }
+
+        .hero-visual pre {
+            font-family: var(--font-body);
+            font-size: 10px;
+            line-height: 1.6;
+            color: var(--fg-dim);
+            white-space: pre;
+        }
+
+        .hero-visual pre .hl { color: var(--accent); }
+        .hero-visual pre .hl2 { color: var(--cyan); }
+        .hero-visual pre .hl3 { color: var(--orange); }
+
+        section {
+            padding: 120px 0;
+            position: relative;
+        }
+
+        .section-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 11px;
+            letter-spacing: 3px;
+            color: var(--accent);
+            margin-bottom: 24px;
+        }
+
+        .section-label::before {
+            content: '';
+            width: 40px;
+            height: 1px;
+            background: var(--accent);
+        }
+
+        .section-title {
+            font-family: var(--font-display);
+            font-size: clamp(32px, 4vw, 56px);
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: -1px;
+            margin-bottom: 20px;
+        }
+
+        .section-desc {
+            font-size: 16px;
+            color: var(--fg-muted);
+            max-width: 640px;
+            line-height: 1.8;
+            margin-bottom: 60px;
+        }
+
+        .problems-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .problem-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 36px;
+            transition: all 0.4s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .problem-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .problem-card:hover {
+            border-color: rgba(255, 77, 77, 0.3);
+            transform: translateY(-4px);
+        }
+
+        .problem-card:hover::before { opacity: 1; }
+
+        .problem-number {
+            font-family: var(--font-display);
+            font-size: 64px;
+            font-weight: 800;
+            color: rgba(255, 77, 77, 0.1);
+            line-height: 1;
+            margin-bottom: 16px;
+        }
+
+        .problem-card h3 {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: var(--fg);
+        }
+
+        .problem-card p {
+            font-size: 13px;
+            color: var(--fg-muted);
+            line-height: 1.8;
+        }
+
+        .problem-stat {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 20px;
+            padding: 6px 12px;
+            background: rgba(255, 77, 77, 0.08);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--red);
+            font-weight: 500;
+        }
+
+        .arch-diagram {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 48px;
+            margin-bottom: 48px;
+            overflow-x: auto;
+        }
+
+        .arch-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .arch-layer {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .arch-node {
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-align: center;
+            min-width: 140px;
+            transition: all 0.3s;
+        }
+
+        .arch-node:hover { transform: scale(1.05); }
+
+        .arch-node.source {
+            background: rgba(66, 245, 232, 0.1);
+            border: 1px solid rgba(66, 245, 232, 0.3);
+            color: var(--cyan);
+        }
+
+        .arch-node.bus {
+            background: var(--accent-dim);
+            border: 1px solid var(--border-accent);
+            color: var(--accent);
+            min-width: 200px;
+        }
+
+        .arch-node.compute {
+            background: rgba(255, 138, 61, 0.1);
+            border: 1px solid rgba(255, 138, 61, 0.3);
+            color: var(--orange);
+        }
+
+        .arch-node.storage {
+            background: rgba(200, 245, 66, 0.08);
+            border: 1px solid rgba(200, 245, 66, 0.2);
+            color: var(--accent);
+        }
+
+        .arch-node.query {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--fg);
+        }
+
+        .arch-arrow {
+            font-size: 20px;
+            color: var(--fg-dim);
+        }
+
+        .arch-label {
+            font-size: 11px;
+            color: var(--fg-dim);
+            letter-spacing: 1px;
+            text-align: center;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .breakthroughs {
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .breakthrough {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 24px;
+            padding: 36px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            transition: all 0.4s;
+        }
+
+        .breakthrough:hover { border-color: var(--border-accent); }
+
+        .breakthrough-icon {
+            width: 80px; height: 80px;
+            border-radius: 16px;
+            background: var(--accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+        }
+
+        .breakthrough h3 {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .breakthrough p {
+            font-size: 14px;
+            color: var(--fg-muted);
+            line-height: 1.8;
+        }
+
+        .breakthrough .metric {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            padding: 4px 12px;
+            background: var(--accent-dim);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .scenarios-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .scenario-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            transition: all 0.4s;
+            position: relative;
+        }
+
+        .scenario-card:hover {
+            border-color: var(--border-accent);
+            transform: translateY(-4px);
+        }
+
+        .scenario-card .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+
+        .scenario-card .tag.defi { background: rgba(255, 77, 77, 0.12); color: var(--red); }
+        .scenario-card .tag.trading { background: rgba(200, 245, 66, 0.12); color: var(--accent); }
+        .scenario-card .tag.security { background: rgba(255, 138, 61, 0.12); color: var(--orange); }
+        .scenario-card .tag.vision { background: rgba(66, 245, 232, 0.12); color: var(--cyan); }
+
+        .scenario-card h3 {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .scenario-card p {
+            font-size: 13px;
+            color: var(--fg-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .scenario-card .impact {
+            font-size: 24px;
+            font-family: var(--font-display);
+            font-weight: 800;
+            color: var(--accent);
+        }
+
+        .scenario-card .impact-label {
+            font-size: 11px;
+            color: var(--fg-dim);
+            margin-top: 4px;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-table th {
+            font-weight: 600;
+            color: var(--fg-muted);
+            font-size: 10px;
+            letter-spacing: 1px;
+        }
+
+        .comparison-table td:first-child {
+            font-weight: 600;
+            color: var(--fg);
+        }
+
+        .comparison-table .yes { color: var(--accent); }
+        .comparison-table .no { color: var(--fg-dim); }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+            padding: 48px 0;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            margin: 60px 0;
+        }
+
+        .stat-item { text-align: center; }
+
+        .stat-value {
+            font-family: var(--font-display);
+            font-size: 48px;
+            font-weight: 800;
+            color: var(--accent);
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--fg-muted);
+            margin-top: 8px;
+            letter-spacing: 1px;
+        }
+
+        .about-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 48px;
+        }
+
+        .about-text p {
+            font-size: 15px;
+            color: var(--fg-muted);
+            line-height: 1.9;
+            margin-bottom: 20px;
+        }
+
+        .about-text p strong { color: var(--fg); }
+
+        .skills-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 24px;
+        }
+
+        .skill-tag {
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            background: var(--accent-dim);
+            color: var(--accent);
+            border: 1px solid rgba(200, 245, 66, 0.15);
+        }
+
+        .contact-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px;
+        }
+
+        .contact-card h3 {
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        .contact-item:last-child { border-bottom: none; }
+
+        .contact-item .icon {
+            width: 36px; height: 36px;
+            border-radius: 8px;
+            background: var(--accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .contact-item .label {
+            font-size: 11px;
+            color: var(--fg-dim);
+            letter-spacing: 1px;
+        }
+
+        .contact-item .value { color: var(--fg); }
+
+        .contact-item a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        footer {
+            padding: 48px 0;
+            border-top: 1px solid var(--border);
+            text-align: center;
+        }
+
+        footer p {
+            font-size: 12px;
+            color: var(--fg-dim);
+        }
+
+        footer .tagline {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 900px) {
+            .container { padding: 0 24px; }
+            .problems-grid { grid-template-columns: 1fr; }
+            .scenarios-grid { grid-template-columns: 1fr; }
+            .stats-bar { grid-template-columns: repeat(2, 1fr); }
+            .about-grid { grid-template-columns: 1fr; }
+            .hero-visual { display: none; }
+            nav .nav-links { display: none; }
+            .hero h1 { letter-spacing: -1px; }
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--fg-dim); border-radius: 3px; }
+
+        .glow-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+
+    <nav>
+        <div class="logo">XZ<span> · Web3 数据架构</span></div>
+        <ul class="nav-links">
+            <li><a href="#problems">核心问题</a></li>
+            <li><a href="#architecture">架构方案</a></li>
+            <li><a href="#scenarios">应用场景</a></li>
+            <li><a href="#about">关于我</a></li>
+        </ul>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-tag">
+                    <span class="dot"></span>
+                    Web3 Festival 2026 · Hong Kong
+                </div>
+                <h1>
+                    从<span class="accent">数据孤岛</span><br>
+                    到<span class="serif">统一</span><span class="accent">智能</span>
+                </h1>
+                <div class="hero-sub">
+                    Web3 实时数据架构的下一个范式 — 将链上、CEX、预言机、私有数据<br>
+                    融合为<strong>湖流一体</strong>的统一流数据总线，实现亚秒级延迟的全量数据智能。
+                </div>
+                <div class="hero-actions">
+                    <a href="#architecture" class="btn btn-primary">查看架构方案 →</a>
+                    <a href="mailto:xiaosuange@gmail.com" class="btn btn-secondary">联系我</a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <pre>
+<span class="hl">fluss://onchain/</span>
+  dex_swaps      <span class="hl2">PK Table</span>
+  decoded_events <span class="hl2">PK Table</span>
+  nft_events     <span class="hl2">Log Table</span>
+
+<span class="hl">fluss://cex/</span>
+  depth_updates  <span class="hl3">Log Table</span>
+  trades         <span class="hl3">Log Table</span>
+  orderbook_l2   <span class="hl3">PK Table</span>
+
+<span class="hl">fluss://oracle/</span>
+  chainlink_feeds   <span class="hl2">PK Table</span>
+  chainlink_streams <span class="hl3">Log Table</span>
+
+<span class="hl">fluss://private/</span>
+  trading_signals
+  address_labels
+  portfolio_snapshots
+                </pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- PROBLEMS -->
+    <section id="problems">
+        <div class="container">
+            <div class="section-label">核心问题</div>
+            <div class="section-title reveal">当前 Web3 数据平台的<br>三大根本性缺陷</div>
+            <div class="section-desc reveal">
+                Dune 和 Nansen 主导了链上数据分析，但它们的架构存在根本性限制，阻碍了 Web3 应用的下一代演进。
+            </div>
+
+            <div class="problems-grid">
+                <div class="problem-card reveal">
+                    <div class="problem-number">01</div>
+                    <h3>数据源割裂</h3>
+                    <p>
+                        Dune 和 Nansen 只能查询链上数据，无法在同一查询中关联 DEX Swap 事件、CEX 订单簿深度和 Chainlink 预言机验证数据。真实的市场洞察恰恰需要多源融合——但现有平台做不到。
+                    </p>
+                    <div class="problem-stat">19 个搜索者从 CEX-DEX 套利中提取 2.338 亿美元——普通用户完全看不到</div>
+                </div>
+                <div class="problem-card reveal">
+                    <div class="problem-number">02</div>
+                    <h3>冷热存储割裂</h3>
+                    <p>
+                        Dune SQL（Trino）= 批处理层，延迟分钟级。Sim API = 实时层，延迟亚秒级。但两层完全割裂——独立账户、独立定价、无法跨 Join。用户需要写两套代码手动拼接结果。
+                    </p>
+                    <div class="problem-stat">Lambda 架构：双倍存储、双倍计算、回测偏差 20-30%</div>
+                </div>
+                <div class="problem-card reveal">
+                    <div class="problem-number">03</div>
+                    <h3>复杂计算缺失</h3>
+                    <p>
+                        DuneSQL 是批处理 MPP 引擎——无流式状态、无事件时间、无 CEP 模式检测、无增量计算。预言机操纵攻击造成 4 亿美元+ DeFi 损失，但检测永远是事后分析。
+                    </p>
+                    <div class="problem-stat">Aave 单日清算量 2 亿美元——实时监控本可预防</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="glow-divider"></div>
+
+    <!-- ARCHITECTURE -->
+    <section id="architecture">
+        <div class="container">
+            <div class="section-label">解决方案</div>
+            <div class="section-title reveal">FlinkCDC → Fluss → Flink → Paimon</div>
+            <div class="section-desc reveal">
+                湖流一体架构，统一多源数据摄入、实时计算和冷热存储——从亚秒到永恒，一个 SQL 覆盖全量数据。
+            </div>
+
+            <div class="arch-diagram reveal">
+                <div class="arch-flow">
+                    <div class="arch-label">数据源层</div>
+                    <div class="arch-layer">
+                        <div class="arch-node source">⛓ 链上事件<br><small>DEX · NFT · 治理</small></div>
+                        <div class="arch-node source">📊 CEX WebSocket<br><small>Binance · OKX 深度</small></div>
+                        <div class="arch-node source">🔮 Chainlink 预言机<br><small>Feeds · Streams · PoR</small></div>
+                        <div class="arch-node source">🔐 私有数据<br><small>信号 · 标签 · 组合</small></div>
+                    </div>
+
+                    <div class="arch-arrow">↓ FlinkCDC / 自定义 Source</div>
+
+                    <div class="arch-label">Fluss — 统一流数据总线（替代 Kafka）</div>
+                    <div class="arch-layer">
+                        <div class="arch-node bus">fluss://onchain/</div>
+                        <div class="arch-node bus">fluss://cex/</div>
+                        <div class="arch-node bus">fluss://oracle/</div>
+                        <div class="arch-node bus">fluss://private/</div>
+                    </div>
+
+                    <div class="arch-arrow">↓ Tiering（30s）+ Flink 计算</div>
+
+                    <div class="arch-label">Flink — 实时计算层</div>
+                    <div class="arch-layer">
+                        <div class="arch-node compute">CEP 模式检测</div>
+                        <div class="arch-node compute">窗口计算</div>
+                        <div class="arch-node compute">Delta Join 多源关联</div>
+                        <div class="arch-node compute">状态管理</div>
+                    </div>
+
+                    <div class="arch-arrow">↓</div>
+
+                    <div class="arch-label">存储 + 统一查询</div>
+                    <div class="arch-layer">
+                        <div class="arch-node storage">Fluss 热数据<br><small>6h · 毫秒级延迟</small></div>
+                        <div class="arch-node storage">Paimon 冷数据<br><small>全量历史 · 列式数据湖</small></div>
+                        <div class="arch-node query">Union Read<br><small>一个 SQL · 实时 + 历史</small></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Breakthroughs -->
+            <div class="breakthroughs">
+                <div class="breakthrough reveal">
+                    <div class="breakthrough-icon">🔗</div>
+                    <div>
+                        <h3>多源统一集成</h3>
+                        <p>
+                            Fluss 四命名空间架构将链上、CEX、预言机、私有数据统一汇入同一流数据总线。Flink Delta Join 实现毫秒级跨源关联——DEX Swap 价格 vs CEX WebSocket 报价 vs Chainlink Data Streams 签名报告，三源交叉验证，偏差超过 1% 实时告警。彻底消除"数据孤岛"。
+                        </p>
+                        <span class="metric">3 数据源 × Delta Join = 实时交叉验证</span>
+                    </div>
+                </div>
+                <div class="breakthrough reveal">
+                    <div class="breakthrough-icon">❄️</div>
+                    <div>
+                        <h3>冷热存储自动查询</h3>
+                        <p>
+                            Fluss 仅保留 6 小时热数据（vs Kafka 的 7 天），Tiering Service 自动沉降到 Paimon，Union Read 透明合并两层——写 <code>SELECT * FROM dex_swaps</code>，引擎自动判断数据位置并合并，Exactly-Once 语义保证不多不少。
+                        </p>
+                        <span class="metric">存储成本 ↓50-70% · 查询延迟提升 10-30 倍</span>
+                    </div>
+                </div>
+                <div class="breakthrough reveal">
+                    <div class="breakthrough-icon">⚡</div>
+                    <div>
+                        <h3>复杂指标实时计算</h3>
+                        <p>
+                            Flink 四大能力——窗口计算、CEP、状态管理、Delta Join——覆盖了 DuneSQL 根本无法实现的场景。预言机操纵检测从"事后分析"变为"5 秒预警"，DeFi 清算从"事后清算"变为"30 秒-5 分钟提前预警"。
+                        </p>
+                        <span class="metric">4 亿美元+ 预言机攻击损失 → 实时 CEP 可预防</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-bar reveal">
+                <div class="stat-item">
+                    <div class="stat-value">10-30×</div>
+                    <div class="stat-label">查询延迟提升</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">50-70%</div>
+                    <div class="stat-label">存储成本降低</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">3-4×</div>
+                    <div class="stat-label">云基础设施节省（Goldsky 验证）</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">5s</div>
+                    <div class="stat-label">预言机操纵预警</div>
+                </div>
+            </div>
+
+            <!-- Comparison -->
+            <div class="reveal">
+                <h3 style="font-family: var(--font-display); font-size: 24px; font-weight: 700; margin-bottom: 24px;">Dune + Sim vs Fluss 架构对比</h3>
+                <div style="overflow-x: auto; border-radius: 12px; border: 1px solid var(--border);">
+                    <table class="comparison-table">
+                        <thead>
+                            <tr>
+                                <th>维度</th>
+                                <th>Dune + Sim</th>
+                                <th>Fluss 架构</th>
+                                <th>提升</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>链上数据查询</td>
+                                <td class="no">Trino 分钟级延迟</td>
+                                <td class="yes">Union Read 秒级</td>
+                                <td class="yes">10-30×</td>
+                            </tr>
+                            <tr>
+                                <td>实时 + 历史关联</td>
+                                <td class="no">两套系统手动拼接</td>
+                                <td class="yes">一条 SQL 自动合并</td>
+                                <td class="yes">开发效率 5×</td>
+                            </tr>
+                            <tr>
+                                <td>预言机操纵检测</td>
+                                <td class="no">事后 SQL 分析</td>
+                                <td class="yes">Flink CEP 5s 预警</td>
+                                <td class="yes">从事后到实时</td>
+                            </tr>
+                            <tr>
+                                <td>CEX-DEX 价差监控</td>
+                                <td class="no">不可能——无 CEX 数据</td>
+                                <td class="yes">统一总线 + Interval Join</td>
+                                <td class="yes">全新能力</td>
+                            </tr>
+                            <tr>
+                                <td>冷热数据查询</td>
+                                <td class="no">Lambda 双倍存储</td>
+                                <td class="yes">自动分层 + Union Read</td>
+                                <td class="yes">成本降 50-70%</td>
+                            </tr>
+                            <tr>
+                                <td>复杂指标计算</td>
+                                <td class="no">不支持 CEP/窗口/状态</td>
+                                <td class="yes">Flink 原生 CEP/窗口/状态</td>
+                                <td class="yes">全新能力</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="glow-divider"></div>
+
+    <!-- SCENARIOS -->
+    <section id="scenarios">
+        <div class="container">
+            <div class="section-label">高价值场景</div>
+            <div class="section-title reveal">架构释放的价值</div>
+            <div class="section-desc reveal">
+                五大场景中，湖流一体架构创造了可量化的经济影响——从不可能到可能，从事后分析到实时预警。
+            </div>
+
+            <div class="scenarios-grid">
+                <div class="scenario-card reveal">
+                    <span class="tag trading">交易</span>
+                    <h3>CEX-DEX 实时套利信号</h3>
+                    <p>
+                        Binance WebSocket 深度流和链上 Swap 事件同时汇入 Fluss，Flink Interval Join 毫秒级检测价差。当前 19 个搜索者垄断了 2.338 亿美元的套利利润。
+                    </p>
+                    <div class="impact">$2.338 亿</div>
+                    <div class="impact-label">年度套利价值，目前被少数人垄断</div>
+                </div>
+
+                <div class="scenario-card reveal">
+                    <span class="tag defi">DeFi</span>
+                    <h3>DeFi 清算实时预警</h3>
+                    <p>
+                        Flink 为每个 Aave 用户维护实时健康因子（Keyed State + RocksDB），健康因子低于 1.5 时触发预警。Aave 单日清算量达 2 亿美元——实时监控可帮助用户避免 5%+ 的损失。
+                    </p>
+                    <div class="impact">$9100 万+</div>
+                    <div class="impact-label">年度可避免清算损失</div>
+                </div>
+
+                <div class="scenario-card reveal">
+                    <span class="tag security">安全</span>
+                    <h3>预言机操纵实时检测</h3>
+                    <p>
+                        Flink CEP 检测"30 秒内 3 次价格更新（单次 >5%）+ 随后 1 分钟内大额借贷"的操纵模式，5 秒内发出预警。2024-2025 年预言机攻击损失超 4 亿美元，实时检测可阻止 80% 的错误清算。
+                    </p>
+                    <div class="impact">5 秒</div>
+                    <div class="impact-label">从事后分析到实时预警</div>
+                </div>
+
+                <div class="scenario-card reveal">
+                    <span class="tag security">安全</span>
+                    <h3>DAO 治理攻击实时检测</h3>
+                    <p>
+                        Flink 双流关联（ERC-20 Transfer + VoteCast）检测闪电贷治理攻击。Beanstalk 攻击：闪电贷获取 46% 投票权重，盗取 1.82 亿美元。Fluss 统一总线可同时监控多个 Governor 合约。
+                    </p>
+                    <div class="impact">$1.82 亿</div>
+                    <div class="impact-label">单次攻击实时检测可避免的损失</div>
+                </div>
+
+                <div class="scenario-card reveal" style="grid-column: 1 / -1;">
+                    <span class="tag vision">Vitalik 愿景</span>
+                    <h3>链上 + 链下混合架构数据总线</h3>
+                    <p>
+                        Vitalik 将"混合应用"列为以太坊五大最激动人心的应用之一——核心模式："链下计算 + 链上承诺 + ZK 证明"。Fluss 的流表二象性（Log Table 记录完整变更流 + PK Table 提供实时状态快照）天然支撑这一范式。链下计算结果通过 Fluss 流式存储，Flink 做实时校验，Paimon 做历史归档，形成完整闭环。
+                    </p>
+                    <div style="display: flex; gap: 24px; margin-top: 16px; flex-wrap: wrap;">
+                        <div><div class="impact">ENS</div><div class="impact-label">域名实时分析</div></div>
+                        <div><div class="impact">ERC-4337</div><div class="impact-label">账户抽象监控</div></div>
+                        <div><div class="impact">ZK 证明</div><div class="impact-label">跨 L2 证明追踪</div></div>
+                        <div><div class="impact">混合预言机</div><div class="impact-label">链上 TWAP × Chainlink</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="glow-divider"></div>
+
+    <!-- ABOUT -->
+    <section id="about">
+        <div class="container">
+            <div class="section-label">关于我</div>
+            <div class="section-title reveal">XINXIN Zheng</div>
+
+            <div class="about-grid">
+                <div class="about-text reveal">
+                    <p>
+                        <strong>5 年国家电网大数据数仓实战经验</strong>，深耕 TB 级海量数据治理、数仓架构设计与实时计算优化。从 FlinkCDC 采集到 Paimon 湖仓，全链路亲手落地——在地球上最复杂的数据环境中积累了实战经验。
+                    </p>
+                    <p>
+                        国内最早系统性研究 <strong>Fluss 湖流一体架构</strong> 并将其映射到 Web3 场景的工程师之一，完成 <strong>6 份深度研究报告</strong>，覆盖竞品分析、架构设计、场景探索和经济效益量化。
+                    </p>
+                    <p>
+                        <strong>Vibecoding 能力</strong>——能通过 AI 辅助快速原型开发，在极短时间内将技术想法转化为可交互的 Demo，验证产品假设。
+                    </p>
+                    <p>
+                        寻找：<strong>高级工程师 / 技术合伙人</strong> 职位，服务于 Web3 数据基础设施团队、需要实时风控的 DeFi 协议、或需要多源数据融合的交易基础设施。
+                    </p>
+                    <div class="skills-list">
+                        <span class="skill-tag">Apache Flink</span>
+                        <span class="skill-tag">FlinkCDC</span>
+                        <span class="skill-tag">Apache Fluss</span>
+                        <span class="skill-tag">Apache Paimon</span>
+                        <span class="skill-tag">Kafka / Redpanda</span>
+                        <span class="skill-tag">Trino / Presto</span>
+                        <span class="skill-tag">Delta Lake</span>
+                        <span class="skill-tag">RocksDB</span>
+                        <span class="skill-tag">CEP</span>
+                        <span class="skill-tag">Vibecoding</span>
+                        <span class="skill-tag">Web3 数据</span>
+                        <span class="skill-tag">DeFi 风控</span>
+                    </div>
+                </div>
+                <div class="contact-card reveal">
+                    <h3>联系方式</h3>
+                    <div class="contact-item">
+                        <div class="icon">✉</div>
+                        <div>
+                            <div class="label">邮箱</div>
+                            <div class="value"><a href="mailto:xiaosuange@gmail.com">xiaosuange@gmail.com</a></div>
+                        </div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="icon">📱</div>
+                        <div>
+                            <div class="label">电话 / WhatsApp</div>
+                            <div class="value">+86 176 0347 4321</div>
+                        </div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="icon">📍</div>
+                        <div>
+                            <div class="label">所在地</div>
+                            <div class="value">中国 · 接受远程 / 搬迁</div>
+                        </div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="icon">🎯</div>
+                        <div>
+                            <div class="label">求职意向</div>
+                            <div class="value">高级工程师 / 技术合伙人</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="tagline">让我们一起构建 Web3 数据基础设施的未来</div>
+            <p>XINXIN Zheng · Web3 Festival 2026, Hong Kong</p>
+        </div>
+    </footer>
+
+    <script>
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        document.querySelectorAll('nav a[href^="#"]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const target = document.querySelector(link.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        window.addEventListener('scroll', () => {
+            const visual = document.querySelector('.hero-visual');
+            if (visual) {
+                const scrolled = window.pageYOffset;
+                visual.style.transform = `translateY(calc(-50% + ${scrolled * 0.3}px))`;
+            }
+        });
+
+        const statObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const el = entry.target;
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateY(0)';
+                }
+            });
+        }, { threshold: 0.5 });
+
+        document.querySelectorAll('.stat-value').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+            statObserver.observe(el);
+        });
+    </script>
+</body>
+</html>
