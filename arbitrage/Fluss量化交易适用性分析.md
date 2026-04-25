@@ -97,6 +97,8 @@ Fluss 方案：客户端只请求 price + amount + timestamp 3 个字段 → Flu
 
 ForthTech 的主力策略（复合套利、Spread 套利、Funding 套利、DEX 套利、配对交易）全部在前 7 个策略范围内，Fluss 完全适配。同时 ForthTech 也在做市和流动性提供，中低延迟做市场景 Fluss 部分适配，低延迟做市需要走极速层。ForthTech 正在招聘 HFT 方向的 Quant Developer，三层架构可以很好地适配这个演进方向。
 
+值得注意的是，根据 Darren 在 Web3 Festival 的分享，ForthTech 已经构建了虚拟订单簿系统，实时接入 30+ 家交易所，每秒处理 3 万行数据。这说明 ForthTech 在行情聚合层已有深厚积累，Fluss 的定位不是替代现有系统，而是**补齐跨源实时关联、风控信号统一分发、回测实盘零偏差**这些数据层能力缺口。
+
 ### 2.2 为什么 Spread 套利不需要微秒级
 
 Spread 套利的核心逻辑是"现货 vs 合约价差"或"跨所价差"，价差的形成和消失是分钟级的：
