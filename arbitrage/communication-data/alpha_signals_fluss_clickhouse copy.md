@@ -96,7 +96,7 @@ Darren 跟我说过要把数据提炼出 Alpha 来。所以我这几天用 Binan
 
 这组快照的结论很直接: 主流资产当前没有足够大的 CEX-DEX 价差。ETH 只有 0.017%, WBTC 0.088%, UNI 0.155%, LINK 0.324%。考虑 Uniswap LP fee、CEX taker fee、链上 Gas、MEV、跨场所库存成本和滑点, 这些都不构成可执行 arbitrage。
 
-真正值得做 CEX-DEX 的不是"每分钟查一次价差", 而是抓短窗口:
+真正值得做 CEX-DEX 的不是“每分钟查一次价差”, 而是抓短窗口:
 
 - 新币上线、链上池先动、CEX order book 后动。
 - 大额 swap 打穿 DEX 池, CEX 暂时没跟上。
@@ -105,31 +105,249 @@ Darren 跟我说过要把数据提炼出 Alpha 来。所以我这几天用 Binan
 
 Dune 或普通 REST 分钟级数据更适合复盘, 不适合捕捉交易窗口。实盘链路需要链上事件秒级摄入, CEX 深度毫秒级摄入, 然后实时 join。
 
-## 4. 推荐实时架构: Fluss 替换 Kafka 层 + Flink + ClickHouse
+## 4. 外部策略参考与可迁移优化
 
-> **架构认知更新**：ForchTech 大概率已经在用 Kafka+Flink+ClickHouse。所以推荐不是"搭一套新架构"，而是"Fluss 替换 Kafka 层，解锁 PK Table / Delta Join / 列裁剪，Flink 和 ClickHouse 不动"。
+这一轮又参考了几个公开项目和帖子, 结论是: 妖币策略不要只做单一 funding 或单一突破, 应该拆成四条互相验证、互相排斥的信号线。
 
-### 4.1 总体链路
+### 4.1 Momentum Hunter: 早期突破追多/追空
+
+参考: WooKiao 的 `Crypto-trading-Hunter`。这个仓库是 Rust + Tokio 的低延迟永续合约机器人, 接 Lighter 和 Gate.io WebSocket, 热路径做滑窗高低点、BBO、OI、价差判断, SQLite 和 Web UI 放在旁路, 避免阻塞信号处理。
+
+它的核心信号可以抽象成:
+
+```text
+long_trigger =
+  current_price >= rolling_low * (1 + jump_threshold)
+  AND current_price == rolling_window_high
+  AND prev_price 尚未突破阈值
+  AND open_interest > min_oi
+  AND spread <= max_spread
+
+short_trigger 对称:
+  current_price <= rolling_high * (1 - jump_threshold)
+  AND current_price == rolling_window_low
+```
+
+可迁移点:
+
+- 滑窗 min/max 用单调队列维护, 不要每个 tick 重扫窗口。
+- 信号必须是“首次越过阈值”, 否则同一段行情会重复报警。
+- 交易可执行性先于信号强度: OI 门槛、BBO spread、半档盘口 notional 都要过。
+- 出场可以拆成多腿: 第一腿快速止盈, 第二腿吃趋势, 最后一腿 runner; 但妖币上 runner 比例不能太大。
+- UI/数据库必须旁路化。热路径只更新状态机和发 signal event, 落库、PnL、dashboard 走异步 worker。
+
+这个策略适合牛市或山寨季追强势启动, 不适合震荡市自动开单。它和 funding carry 的关系是互补的: funding carry 是相对低频持仓, Momentum Hunter 是极短线启动捕捉。
+
+### 4.2 Accumulation Radar: 庄家收筹/暗流监控
+
+参考: connectfarm1 的 `accumulation-radar`。公开 README 里把它定义为“横盘吸筹检测 + OI 异动监控 + 三策略独立评分”, 数据源是 Binance Futures K 线、24h ticker、open interest history、premium index, 以及 Binance 现货市值接口。
+
+它的三类信号可以迁移成:
+
+1. 追多/short-squeeze: 涨幅为正 + funding 为负 + 成交额过滤。负 funding 代表空头燃料, 价格继续涨会逼空。
+2. 综合评分: funding、市值、横盘天数、OI 变化四维均衡。
+3. 埋伏评分: 低市值 + OI 异动 + 长横盘 + 负 funding bonus。
+
+更重要的是 OI/价格矩阵:
+
+| OI | 价格 | 解读 | 用法 |
+|---|---|---|---|
+| 上升 | 上升 | 主动加仓做多/趋势确立 | 可作为突破确认 |
+| 上升 | 下跌 | 主动加仓做空 | 可能形成 short fuel |
+| 上升 | 横盘 | 暗流涌动/建仓 | 适合加入 watchlist |
+| 下降 | 上涨 | 空头 squeeze 或平仓推动 | 谨慎追高 |
+| 下降 | 下跌 | 多头平仓/止损潮 | 闪崩策略观察 |
+
+这个雷达最适合做“候选池生成”, 不适合直接自动开单。它可以每天更新一次长期收筹池, 每小时或每 5 分钟更新 OI/funding 异动, 然后把候选池喂给更快的 Flink 策略。
+
+### 4.3 Binance Alpha / 上所与叙事催化
+
+参考: connectfarm1 的 `binance-alpha-monitor` 和用户给的妖币雷达思路。这个方向不是纯价格策略, 而是事件驱动:
+
+- Binance Alpha 或多交易所集中上新。
+- Tier-1 上所次数, 尤其 Binance、OKX、Bitget、Coinbase、Upbit、Bybit、Bithumb。
+- VC/叙事/FDV/流通市值。
+- 上线前倒计时、上线后 30 分钟追踪、翻倍/腰斩异动推送。
+
+可迁移到我们架构里的特征:
+
+```text
+listing_score =
+  tier1_listing_count_14d * 20
+  + unique_exchange_count_14d * 8
+  + binance_alpha_bonus
+  + hot_narrative_bonus
+  + low_float_bonus
+  - unlock_risk_penalty
+```
+
+这个分数不要直接作为买入信号, 而应该作为 universe 权重。比如同样命中 funding/OI/突破信号, 近期多交易所上所且叙事强的币优先级更高。
+
+### 4.4 V4A-Flash: 暴涨回撤做空
+
+参考用户贴的 Skanda/V4A-Flash 思路。关键不是预测启动, 而是等妖币已经进入操纵状态后, 在庄家弃盘/多头衰竭时抢第一段下跌。
+
+核心假设:
+
+- 妖币庄的资金有成本, 趋势形成后不会无限逆势护盘。
+- 预测启动和摸顶都容易过拟合, 真正可执行的是暴涨后的早期回撤。
+- 持仓要短, 出场要快, 信号只做 alert 或小仓验证, 不直接满自动化。
+
+候选过滤:
+
+- 先按上币时间、解锁状态、流通结构分组。
+- ban 低成交量、接近全流通 meme、深度太差的币。
+- 关注新合约和“项目结束但仍有合约/低市值/无人关注”的老币。
+
+入场模板:
+
+```text
+flash_short_setup =
+  24h 或 48h 累计涨幅足够大
+  AND 4h 动能衰竭
+  AND 1h 出现 lower high 或首次回撤破位
+  AND 当前盘口可成交 notional >= 目标仓位 * 3
+  AND funding 不再继续支持多头拉升
+
+exit =
+  trail on favorable move
+  OR wide_stop_loss
+  OR max_hold_time = 8h
+```
+
+注意这里要非常防 look-ahead bias。不能用未来 K 线确定 peak、支撑位、lower high。实盘实现必须只用当下已闭合 K 线和当前 tick。
+
+### 4.5 用当前 Binance 数据做一次多因子快照
+
+采样时间: 2026-04-28 04:23 UTC。Universe: Binance USDT 永续 24h 成交额前 60, 成功拉到 57 个 OI 样本。
+
+Short-squeeze 候选口径: `24h 涨幅 > 3% AND funding < 0 AND OI 1h 上升 AND 24h 成交额 > $20M`。
+
+| Symbol | 24h 涨幅 | 最新 funding | OI 1h | OI 6h | 24h quoteVolume | 解读 |
+|---|---:|---:|---:|---:|---:|---|
+| ZKJUSDT | +33.4% | -0.6422% | +2.4% | +74.4% | $49M | 最像逼空结构: 涨幅大、费率极负、OI 6h 大增 |
+| ORCAUSDT | +13.4% | -0.0739% | +2.0% | +4.5% | $603M | 流动性好, 但前面 funding 已极端, 需防回撤 |
+| AXSUSDT | +5.7% | -0.0247% | +6.6% | +4.7% | $90M | 更像温和 squeeze, 可做观察 |
+
+Flash-short 候选口径: `24h 涨幅 > 20% AND 成交额 > $20M`。
+
+| Symbol | 24h 涨幅 | 最新 funding | OI 1h | OI 6h | 24h quoteVolume | 解读 |
+|---|---:|---:|---:|---:|---:|---|
+| DAMUSDT | +138.8% | +1.1271% | -8.2% | +13.6% | $388M | 暴涨后 OI 1h 下降, 更像闪崩观察池, 不适合追多 |
+| PRLUSDT | +44.1% | -0.5136% | -0.4% | +10.4% | $497M | 涨幅大且 funding 负, 可能仍有 squeeze, 做空要等 lower high |
+| ZKJUSDT | +33.4% | -0.6422% | +2.4% | +74.4% | $49M | 同时命中 squeeze 与 flash-short 观察, 需要更细 K 线确认方向 |
+
+这个样本说明一件事: 同一个币可能同时被不同策略看上, 但方向相反。ZKJ 对追多是 short-squeeze 候选, 对做空是暴涨后潜在 flash-short 候选。解决方法不是拍脑袋选方向, 而是做“策略仲裁”:
+
+```text
+if squeeze_score 高 and flash_short_score 高:
+  不自动开单
+  降级为人工盯盘/等待 1h lower high 或 funding 回升
+elif squeeze_score 高 and flash_short_score 低:
+  允许短线追多
+elif flash_short_score 高 and squeeze_score 低:
+  等第一次 lower high 后做空
+```
+
+### 4.6 融合后的策略分层
+
+| 层 | 目标 | 输入 | 输出 | 更新频率 |
+|---|---|---|---|---|
+| Universe | 找哪些币值得盯 | 上所、FDV、解锁、横盘、市值、历史操纵频率 | watchlist | 每天/每小时 |
+| Fuel | 判断多空燃料 | funding、OI、清算、long/short ratio | squeeze/flush pressure | 1m-5m |
+| Trigger | 找入场点 | tick/BBO、1m/5m/1h K线、lower high、breakout | long/short signal | tick-1m |
+| Execution | 判断能否成交 | spread、book depth、min notional、slippage、cooldown | order intent | tick |
+| Exit | 控制持仓时间 | trail、反弹苗头、max hold、funding reversal | close/reduce | tick-1m |
+
+新增表:
+
+```sql
+CREATE TABLE token_universe_features (
+  symbol STRING,
+  listed_at TIMESTAMP(3),
+  tier1_listing_count_14d INT,
+  exchange_count_14d INT,
+  fdv DOUBLE,
+  circulating_mcap DOUBLE,
+  unlock_days INT,
+  unlock_risk STRING,
+  sideways_days INT,
+  range_pct_90d DOUBLE,
+  manipulation_score DOUBLE,
+  updated_at TIMESTAMP(3),
+  PRIMARY KEY (symbol) NOT ENFORCED
+);
+
+CREATE TABLE perp_fuel_features (
+  symbol STRING,
+  funding_rate DOUBLE,
+  funding_8h_avg DOUBLE,
+  funding_zscore DOUBLE,
+  oi_usd DOUBLE,
+  oi_change_1h DOUBLE,
+  oi_change_6h DOUBLE,
+  liquidation_long_1h DOUBLE,
+  liquidation_short_1h DOUBLE,
+  price_change_24h DOUBLE,
+  quote_volume_24h DOUBLE,
+  updated_at TIMESTAMP(3),
+  PRIMARY KEY (symbol) NOT ENFORCED
+);
+
+CREATE TABLE strategy_arbitration (
+  symbol STRING,
+  squeeze_score DOUBLE,
+  accumulation_score DOUBLE,
+  momentum_score DOUBLE,
+  flash_short_score DOUBLE,
+  final_action STRING,
+  reason STRING,
+  updated_at TIMESTAMP(3),
+  PRIMARY KEY (symbol) NOT ENFORCED
+);
+```
+
+优化后的实时链路:
+
+```text
+slow features: 上所/FDV/解锁/声量/横盘
+  -> token_universe_features
+
+fast features: funding/OI/liquidation/BBO/Kline
+  -> perp_fuel_features + latest_book
+
+Flink arbitration
+  -> 同币多策略冲突检测
+  -> signal with action: watch / long / short / no-trade
+```
+
+### 4.7 对原文档结论的修正
+
+原文档偏 Funding Carry 和 CEX-DEX arbitrage, 现在应该加一个更贴近当前行情的判断:
+
+- Funding 极端不只用于 carry, 也可以作为妖币 squeeze/flash 的燃料特征。
+- 负 funding + 价格上涨 + OI 上升, 更像短线逼空追多, 不是 carry。
+- 暴涨后 funding 仍极端、OI 开始下降、1h lower high 出现, 才更接近 V4A-Flash 做空。
+- 多交易所上所、FDV、解锁、声量和 KOL 关注变化, 主要用于候选池和优先级, 不直接决定入场。
+- 自动交易的最低要求是策略仲裁。单个币同时命中追多和做空时, 默认不自动交易。
+
+## 5. 推荐实时架构: Fluss + Flink
+
+### 5.1 总体链路
 
 ```mermaid
 flowchart LR
   A["Binance WebSocket: depth, markPrice, forceOrder, funding"] --> B["Ingestion Gateway"]
   C["Ethereum node / MEV relay / DEX events"] --> B
-  B --> D["Fluss log tables: raw events (替代 Kafka)"]
-  B --> E["Fluss PK tables: latest state (替代 Redis)"]
+  B --> D["Fluss log tables: raw events"]
+  B --> E["Fluss PK tables: latest state"]
   D --> F["Flink feature jobs"]
   E --> F
-  F --> G["Signal table (Fluss PK Table)"]
+  F --> G["Signal table"]
   G --> H["Risk checks"]
   H --> I["Execution adapter"]
-  G --> J["ClickHouse backtest and analytics (不动)"]
+  G --> J["ClickHouse backtest and analytics"]
 ```
-
-**与现有架构的关系**：
-- Fluss 替换 Kafka：Log Table = Kafka Topic，协议兼容，Kafka Consumer 可直接读 Fluss
-- Fluss PK Table 替换 Redis：最新状态存储，Flink SQL 可直接查询和 Join
-- Flink 不动：计算逻辑不变，但状态从 RocksDB/内存迁移到 Fluss PK Table
-- ClickHouse 不动：继续做 OLAP、回测、Dashboard
 
 Fluss 在这里负责两类表:
 
@@ -138,7 +356,7 @@ Fluss 在这里负责两类表:
 
 Apache Fluss 0.9 文档里 Primary Key Table 支持 `INSERT`、`UPDATE`、`DELETE`, 同一个 primary key 多次写入时保留最后一条, 并支持 primary key lookup。Flink 写 Fluss 时, primary-key table 可接收 upsert/changelog, log table 只能 append insert。Delta Join 在 Flink 2.1+ 里可以把传统 streaming join 转成基于 Fluss source table 的索引查找, 减少 Flink state。
 
-### 4.2 Funding Rate 策略流程
+### 5.2 Funding Rate 策略流程
 
 实时链路:
 
@@ -227,7 +445,7 @@ GROUP BY symbol, window_end;
 - 事件过滤: 上市首日、合约参数调整、交易暂停、指数成分变化时不交易。
 - 库存过滤: 反向 carry 需要 borrow inventory, 借币利率必须小于 funding edge。
 
-### 4.3 CEX-DEX 价差策略流程
+### 5.3 CEX-DEX 价差策略流程
 
 实时链路:
 
@@ -297,35 +515,31 @@ net_edge = gross_spread
 
 信号阈值不应该固定 1%。对 ETH 这种深池, 0.20% 可能已经值得关注; 对小币, 2% 也可能不够, 因为实际能成交的 size 很小。
 
-## 5. Kafka vs Fluss 对比（ClickHouse 作为辅助参考）
+## 6. ClickHouse 对比
 
-**核心前提**：ClickHouse 继续做 OLAP 不动。对比重点是 Flink 的上游——Kafka vs Fluss。
+ClickHouse 不是不能做这件事, 它很适合做历史分析、回测、报表和特征复盘。但如果目标是秒级甚至毫秒级信号, Fluss + Flink 更自然。
 
-| 维度 | Kafka + Flink | Fluss + Flink | ClickHouse (不动) |
-|---|---|---|---|
-| 最新状态读取 | Flink 自己维护状态或加 Redis | PK Table 点查, 亚毫秒 | ReplacingMergeTree + FINAL 延迟高 |
-| 更新语义 | Append-only, 无主键 | PK Table upsert/changelog | ReplacingMergeTree 异步合并 |
-| 双流 Join | Flink Regular Join, TB 级状态 | Delta Join, 零状态 | 查询时 JOIN, 延迟 350ms-3s |
-| 消费模式 | 全量消费, 每条消息完整读取 | 列裁剪, 只读需要的列 | 列存查询时裁剪, 但摄入全量 |
-| 原始事件存储 | Kafka Log, append-only | Fluss Log Table, 兼容 Kafka | MergeTree, 非常适合 |
-| 回测分析 | 不适合 | Paimon Union Read | 非常适合 |
-| CEP 复杂事件检测 | Flink CEP + Kafka 全量状态 | Flink CEP + Fluss PK Table 状态极小 | 不支持 |
-| 多 Consumer 带宽 | 每个 Consumer 独立全量消费 | 服务端列裁剪, 共享存储 | 每次查询独立扫描 |
+| 维度 | Fluss + Flink | ClickHouse |
+|---|---|---|
+| 最新状态读取 | PK table 可按主键 lookup, 适合 `symbol -> latest state` | MergeTree primary key 是稀疏索引, 不是 OLTP 唯一键 |
+| 更新语义 | Primary Key Table upsert/changelog 更自然 | ReplacingMergeTree 可做去重/最新版, 但合并是后台过程, 查询强一致通常要 `FINAL` 或额外设计 |
+| 实时 Join | Flink Delta Join 可用 Fluss source table lookup 减少 state | 可以 JOIN, 但更偏查询时计算或物化视图预聚合 |
+| 原始事件存储 | Log table 保留 append-only 事件 | 非常适合, ClickHouse 强项 |
+| 回测分析 | 可以, 但不是最强项 | 非常适合窗口聚合、分桶、报表、历史回测 |
+| 风控最新状态 | 适合做在线 state serving | 需要额外 latest 表、Dictionary、KeeperMap 或外部 KV |
+| 运维风险 | Fluss 仍在 Apache Incubator, 版本演进快 | 生态成熟, 但实时 upsert/强一致最新版要设计清楚 |
 
-**Kafka→Fluss 迁移成本**：
-- Kafka Consumer 协议兼容，改连接地址即可
-- Flink Source 不需要改代码，只换 connector
-- 可以并行跑：Kafka 不停，新作业走 Fluss
+更准确的说法是:
 
-推荐组合（最小变更路径）：
+ClickHouse 如果表按 `(symbol, event_time)` 排序, 查询单个 symbol 的 7 天 funding 不会扫全表, 稀疏索引和分区能剪枝。但当信号计算需要持续对全市场做最新状态点查、跨流 join、低延迟风控校验时, ClickHouse 会逐渐变成“分析库兼在线库”, 需要更多物化视图和补偿逻辑。Fluss 的 PK table 更贴近这个在线状态层。
 
-- **Kafka → Fluss**：流中间件层升级，协议兼容，新增 PK Table + 列裁剪 + Delta Join
-- **Flink**：不动，但状态从 RocksDB/内存迁到 Fluss PK Table
-- **Redis → Fluss PK Table**：少维护一个系统（如果他们在用 Redis 做状态缓存的话）
-- **ClickHouse**：不动，继续做 OLAP、回测、Dashboard
-- **Paimon**：通过 Fluss Tiering 自动归档全量历史
+推荐组合:
 
-## 6. 真实落地会踩的坑
+- Fluss: 最新状态、在线 lookup、实时 join。
+- Flink: 特征计算、窗口聚合、信号生成。
+- ClickHouse: 原始事件落盘、回测、dashboard、post-trade analysis。
+
+## 7. 真实落地会踩的坑
 
 ### Funding Rate
 
@@ -345,7 +559,7 @@ net_edge = gross_spread
 - CEX depth stream 有序列号, 断线后必须重新 snapshot + replay, 否则本地 order book 会漂。
 - 链上事件有 reorg, 信号可以先 soft-confirm, 执行前再按确认数和池状态二次校验。
 
-## 7. 下一步实验
+## 8. 下一步实验
 
 1. Funding replay: 对 RAVEUSDT、RIVERUSDT、AIOTUSDT、ORCAUSDT 做逐小时资金费率、mark-index basis、24h realized vol、open interest 联合回放。
 2. Execution replay: 拉 Binance depth snapshot + aggTrades, 估计 $10k、$50k、$100k notional 的真实滑点。
@@ -353,8 +567,12 @@ net_edge = gross_spread
 4. CEX-DEX replay: 选 ETH、LINK、UNI 和 2-3 个长尾币, 用链上 Swap 事件和 CEX book ticker 做秒级 join, 统计超过净收益阈值的持续时间。
 5. ClickHouse baseline: 同一批事件落 ClickHouse, 做 materialized view + AggregatingMergeTree, 对比端到端延迟、查询 CPU、信号漏报率。
 
-## 8. 参考链接
+## 9. 参考链接
 
+- WooKiao/Crypto-trading-Hunter: https://github.com/WooKiao/Crypto-trading-Hunter
+- connectfarm1/accumulation-radar: https://github.com/connectfarm1/accumulation-radar
+- connectfarm1/binance-alpha-monitor: https://github.com/connectfarm1/binance-alpha-monitor
+- 妖币雷达页面快照: https://app.guamee.uk/
 - Binance USD-M Futures Funding Rate History: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-History
 - Binance USD-M Futures 24hr Ticker: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/24hr-Ticker-Price-Change-Statistics
 - DEX Screener API Reference: https://docs.dexscreener.com/api/reference

@@ -1,10 +1,12 @@
-# Fluss+Flink 四大补位能力：架构细节、ClickHouse 对比与真实数据验证
+# Fluss 四大补位能力：架构细节、Kafka/ClickHouse 对比与真实数据验证
 
 ---
 
 ## 文档定位
 
-本文是"与数据同事沟通"演讲稿第四段的技术底稿。目标：每个补位能力都有具体的架构流程、ClickHouse 对比、伪代码/SQL 示例、技术坑点、以及基于真实市场数据的模拟回测结论。
+本文是"与数据同事沟通"演讲稿的技术底稿。**核心前提已更新：他们大概率已经在用 Kafka+Flink+ClickHouse 架构。** 所以对比基准不是"有 Flink vs 没 Flink"，而是"Kafka+Flink vs Fluss+Flink"。ClickHouse 不动，继续做 OLAP。
+
+每个补位能力都有：架构流程、**Kafka vs Fluss 对比**（ClickHouse 作为辅助对比）、伪代码/SQL 示例、技术坑点、基于真实市场数据的模拟回测结论。
 
 ---
 
